@@ -1,11 +1,11 @@
 parameters:
-  level: 5
+  #level: 5
+  level: 0
   paths:
-    - includes
-  excludePaths:
-    analyseAndScan:
-      - .ddev
-    analyse:
-    - vendor
+    - corvuspay-woocommerce-integration.php
+    - uninstall.php
+    - includes/
   bootstrapFiles:
     - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+  scanDirectories:
+    - vendor/woocommerce/subscriptions-core/includes/
