@@ -3,7 +3,7 @@ Contributors: Corvus Pay d.o.o.
 Tags: payment, credit card, corvuspay, woocommerce
 Requires at least: 4.0
 Tested up to: 6.4.3
-Stable tag: 2.5.7
+Stable tag: 2.6.0
 Requires PHP: 5.6
 License: GNU General Public License v2.0 (or later)
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
@@ -125,6 +125,9 @@ According to the Cash Transaction Fiscalization Law, cards are a payment method 
 10. CorvusPay Wallet stored credit card.
 
 == Changelog ==
+
+= 2.6.0 =
+* Block based checkout and HPOS support.
 
 = 2.5.7 =
 * Added support for cURL compiled with NSS and GnuTLS.

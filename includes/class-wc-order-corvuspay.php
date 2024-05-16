@@ -9,6 +9,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 require_once WP_PLUGIN_DIR . '/corvuspay-woocommerce-integration/vendor/autoload.php';
+
+use Automattic\WooCommerce\Utilities\OrderUtil;
+
 /**
  * Class WC_Order_CorvusPay
  */
@@ -179,8 +182,8 @@ class WC_Order_CorvusPay extends WC_Order {
 			
 			if ( 'callback-signed' === $type ) {
 				if ( isset( $this->parameters["approval_code"] ) && $this->parameters["approval_code"] != null ) {
-					update_post_meta( $this->get_id(), '_corvuspay_approval_code', $this->parameters["approval_code"] );
-					update_post_meta( $this->get_id(), '_corvuspay_transaction_date', current_time( "d.m.Y H:i:s" ) );
+					$this->update_meta_data( '_corvuspay_approval_code', $this->parameters["approval_code"] );
+					$this->update_meta_data( '_corvuspay_transaction_date', current_time( "d.m.Y H:i:s" ) );
 				}
                 $res = $this->client->validate->signature( $this->parameters );
                 $this->log->debug( 'Result from signature validation: ' . $res );
@@ -342,31 +345,26 @@ class WC_Order_CorvusPay extends WC_Order {
 	/**
 	 * Generate Order number from Order number format and set to parameters.
 	 *
-	 * @return string order_number.
 	 */
 	private function generate_and_set_parameter_order_number() {
 		/* We here flush cache because of the plugin "Sequential Order Number for WooCommerce" */
 		wp_cache_flush();
-		$corvuspay_order_number = get_post_meta( $this->get_id(), '_corvuspay_order_number', true );
-		$order_number_base = get_post_meta( $this->get_id(), '_order_number', true );
+		$order                  = wc_get_order( $this->get_id() );
+		$corvuspay_order_number = $order->get_meta( '_corvuspay_order_number' );
+		$order_number_base      = $order->get_meta( '_order_number' );
+
 		$this->log->debug( "Entered generate_and_set_parameter_order_number, _corvuspay_order_number is {$corvuspay_order_number} and _order_number is {$order_number_base}" );
 
 		if ( $corvuspay_order_number ) {
-			/* If somehow the value of _corvuspay_order_number is duplicate, then regenerate the order_number.
-			Cannot use get_posts() or WP_Query because 'post_type' => 'shop_order' is not public.*/
-
-			global $wpdb;
-			$posts = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}postmeta WHERE meta_key = '_corvuspay_order_number' AND meta_value = '{$corvuspay_order_number}'");//
-
-			if ( count( $posts ) === 0 || count( $posts ) === 1 && (int)$posts[0]->post_id === $this->get_id()) {
+			/* If somehow the value of _corvuspay_order_number is duplicate, then regenerate the order_number. */
+			if ( $this->is_corvuspay_order_number_unique( $corvuspay_order_number ) ) {
 				$this->parameters['order_number'] = $corvuspay_order_number;
 			} else {
-				$this->log->debug("Found duplicate _corvuspay_order_number!");
-				$this->parameters['order_number'] = $this->generate_order_number($order_number_base);
+				$this->log->debug( "Found duplicate _corvuspay_order_number!" );
+				$this->parameters['order_number'] = $this->generate_order_number( $order_number_base );
 			}
-
 		} else {
-			$this->parameters['order_number'] = $this->generate_order_number($order_number_base);
+			$this->parameters['order_number'] = $this->generate_order_number( $order_number_base );
 		}
 	}
 
@@ -379,7 +377,7 @@ class WC_Order_CorvusPay extends WC_Order {
 		/* We here flush cache because of the plugin "Sequential Order Number for WooCommerce" */
 		wp_cache_flush();
 
-		$corvuspay_order_number = get_post_meta( $this->get_id(), '_corvuspay_order_number', true );
+		$corvuspay_order_number = $this->get_meta('_corvuspay_order_number');
 		$this->log->debug( "Entered set_parameter_order_number, _corvuspay_order_number is {$corvuspay_order_number}." );
 
 		if ( $corvuspay_order_number ) {
@@ -410,8 +408,9 @@ class WC_Order_CorvusPay extends WC_Order {
 				'{order_number}' => $order_number_base
 			)
 		);
-		update_post_meta( $this->get_id(), '_corvuspay_order_number', $order_number );
-		update_post_meta( $this->get_id(), '_order_number', $order_number );
+		$this->update_meta_data( '_corvuspay_order_number', $order_number );
+		$this->update_meta_data( '_order_number', $order_number );
+		$this->save_meta_data();
 		return $order_number;
 	}
 	/**
@@ -588,7 +587,7 @@ class WC_Order_CorvusPay extends WC_Order {
 	 * Sets the 'creditor_reference' parameter.
 	 */
 	private function set_parameter_creditor_reference() {
-		$order_number_base = get_post_meta( $this->get_id(), '_order_number', true );
+		$order_number_base = $this->get_meta( '_order_number' );
 		if ( ! $order_number_base ) {
 			$order_number_base = $this->get_id();
 		}
@@ -704,16 +703,60 @@ class WC_Order_CorvusPay extends WC_Order {
      * @return int|null id of last post with '_corvuspay_order_number' == $corvuspay_order_number or null if not exists.
      */
 	private function get_post_by_corvuspay_order_number( $corvuspay_order_number ) {
-		$cc_args  = array(
-			'post_type'   => 'shop_order',
-			'post_status' => array_values( get_post_stati( [ 'exclude_from_search' => false ] ) ),
-			'meta_key'    => '_corvuspay_order_number',
-			'meta_value'  => $corvuspay_order_number
-		);
-		$cc_query = get_posts( $cc_args );
+		if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			/* HPOS usage is enabled. */
+			$orders = wc_get_orders(
+				array(
+					'meta_query' => array(
+						array(
+							'key'        => '_corvuspay_order_number',
+							'value'      => $corvuspay_order_number
+						)
+					)
+				)
+			);
+			$last_post_id = count( $orders ) ? $orders[ count( $orders ) - 1 ]->get_id() : null;
+		} else {
+			$cc_args  = array(
+				'post_type'   => 'shop_order',
+				'post_status' => array_values( get_post_stati( [ 'exclude_from_search' => false ] ) ),
+				'meta_key'    => '_corvuspay_order_number',
+				'meta_value'  => $corvuspay_order_number
+			);
+			$cc_query = get_posts( $cc_args );
 
-		$last_post_id = count( $cc_query ) ? $cc_query[ count( $cc_query ) - 1 ]->ID : null;
+			$last_post_id = count( $cc_query ) ? $cc_query[ count( $cc_query ) - 1 ]->ID : null;
+		}
 
 		return $last_post_id;
+	}
+
+	/**
+	 * Check if order with meta key '_corvuspay_order_number' and meta value $corvuspay_order_number is unique.
+	 *
+	 * @param string $corvuspay_order_number
+	 *
+	 * @return bool
+	 */
+	private function is_corvuspay_order_number_unique( $corvuspay_order_number ) {
+		if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			/* HPOS usage is enabled. */
+			$orders = wc_get_orders(
+				array(
+					'meta_query' => array(
+						array(
+							'key'        => '_corvuspay_order_number',
+							'value'      => $corvuspay_order_number
+						)
+					)
+				)
+			);
+			return count( $orders ) === 0 || count( $orders ) === 1 && (int)$orders[0]->get_id() === $this->get_id();
+		} else {
+			/*  Cannot use get_posts() or WP_Query because 'post_type' => 'shop_order' is not public. */
+			global $wpdb;
+			$posts = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}postmeta WHERE meta_key = '_corvuspay_order_number' AND meta_value = '{$corvuspay_order_number}'");
+			return count( $posts ) === 0 || count( $posts ) === 1 && (int)$posts[0]->post_id === $this->get_id();
+		}
 	}
 }

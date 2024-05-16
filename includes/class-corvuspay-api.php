@@ -9,6 +9,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 require_once WP_PLUGIN_DIR . '/corvuspay-woocommerce-integration/vendor/autoload.php';
+
+use Automattic\WooCommerce\Utilities\OrderUtil;
+
 // phpcs:disable WordPress.WP.AlternativeFunctions.curl_curl_init
 // phpcs:disable WordPress.WP.AlternativeFunctions.curl_curl_error
 // phpcs:disable WordPress.WP.AlternativeFunctions.curl_curl_setopt_array
@@ -200,8 +203,8 @@ class CorvusPay_API {
 
 		$is_authorized = 'authorized' == $xml->{'status'};
 		if ( $is_authorized && isset( $xml->{'approval-code'} ) && $xml->{'approval-code'} != null ) {
-			update_post_meta( $order->get_id(), '_corvuspay_approval_code', (string) $xml->{'approval-code'} );
-			update_post_meta( $order->get_id(), '_corvuspay_transaction_date', current_time( "d.m.Y H:i:s" ) );
+			$order->update_meta_data( '_corvuspay_approval_code', (string) $xml->{'approval-code'} );
+			$order->update_meta_data( '_corvuspay_transaction_date', current_time( "d.m.Y H:i:s" ) );
 		}
 
 		return $is_authorized;

@@ -9,6 +9,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 require_once WP_PLUGIN_DIR . '/corvuspay-woocommerce-integration/vendor/autoload.php';
+
+use Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableController;
+use Automattic\WooCommerce\Utilities\OrderUtil;
+
 /**
  * CorvusPay Payment Gateway Class.
  */
@@ -263,6 +267,8 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 	 */
 	public function add_theme_scripts() {
 		wp_enqueue_style( 'corvuspay', plugins_url( 'assets/css/corvuspay.css', WC_CORVUSPAY_FILE ), array(), '1.0.0' );
+		wp_register_script( 'corvuspay', plugins_url( 'assets/js/frontend/corvuspay-checkout.js', WC_CORVUSPAY_FILE ) );
+		wp_enqueue_script( 'corvuspay' );
 	}
 
 	/**
@@ -276,8 +282,19 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 			wp_enqueue_style( 'woocommerce_corvuspay_admin', plugins_url( 'assets/css/corvuspay-admin.css', WC_CORVUSPAY_FILE ), array(), '1.0.0' );
 		}
 
-		if ( 'shop_order' === get_current_screen()->id && 'post.php' == $hook && isset($_GET['post']) && $_GET['action'] == 'edit' ) {
-            $post_id = $_GET['post'];
+		$is_order_edit_view = false;
+		if ( class_exists( '\Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableController' ) &&
+		     wc_get_container()->get( CustomOrdersTableController::class )->custom_orders_table_usage_is_enabled() &&
+		     wc_get_page_screen_id( 'shop-order' ) === get_current_screen()->id && wc_get_page_screen_id( 'shop-order' ) == $hook &&
+		     isset( $_GET['id'] ) && $_GET['action'] == 'edit' ) {
+			$is_order_edit_view = true;
+			$post_id            = $_GET['id'];
+		} else if ( 'shop_order' === get_current_screen()->id && 'post.php' == $hook && isset( $_GET['post'] ) && $_GET['action'] == 'edit' ) {
+			$is_order_edit_view = true;
+			$post_id            = $_GET['post'];
+		}
+
+		if ( $is_order_edit_view ) {
             $order = wc_get_order($post_id);
 
             // Targeting only Orders which payment method is CorvusPay.
@@ -320,7 +337,8 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 			$token_id = 'new';
 		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing
-		if ( isset( $_POST[ "wc-{$this->id}-new-payment-method" ] ) && 'true' === $_POST[ "wc-{$this->id}-new-payment-method" ] ) {
+		if ( isset( $_POST["wc-{$this->id}-new-payment-method"] ) &&
+             ( 'true' === $_POST["wc-{$this->id}-new-payment-method"] || true == $_POST["wc-{$this->id}-new-payment-method"] ) ) {
 			$token_id = 'new';
 		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing
@@ -738,6 +756,21 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 	 * Generate Payment Fields HTML. Removes Credit Card input and adds description.
 	 */
 	public function payment_fields() {
+		$description = $this->replace_card_type_icons();
+		echo wpautop( wptexturize( $description ) );
+		if ( $this->supports( 'tokenization' ) && is_checkout() ) {
+			$this->tokenization_script();
+			$this->saved_payment_methods();
+			$this->save_payment_method_checkbox();
+		}
+	}
+
+	/**
+	 * Replace the shortcodes from description with the icons of card types.
+     *
+     * @return string description HTML.
+	 */
+	public function replace_card_type_icons() {
 		$search_array  = [];
 		$replace_array = [];
 		$subject       = $this->get_description();
@@ -759,13 +792,8 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 		$search_array[]  = ":wallet:";
 		$replace_array[] = '<img style="width:10%" src=' . plugins_url( "assets/img/outline/wallet.svg", WC_CORVUSPAY_FILE ) . ' alt="wallet">';
 
-		$new_string = str_replace( $search_array, $replace_array, $subject );
-		echo wpautop( wptexturize( $new_string ) );
-		if ( $this->supports( 'tokenization' ) && is_checkout() ) {
-			$this->tokenization_script();
-			$this->saved_payment_methods();
-			$this->save_payment_method_checkbox();
-		}
+		return str_replace( $search_array, $replace_array, $subject );
+
 	}
 
 	/**
@@ -1408,11 +1436,13 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 	function change_woocommerce_order_number( $order_number, $order ) {
 		global $wp;
 
+		$corvuspay_order_number_db     = $order->get_meta( '_corvuspay_order_number' );
+		$order_number_base             = $order->get_meta( '_order_number' );
+
 		if ( isset($wp->query_vars['order-pay']) && absint($wp->query_vars['order-pay']) > 0 && $order->get_payment_method() === "corvuspay") {
-			if ( get_post_meta( $order->get_id(), '_corvuspay_order_number', true ) ) {
-				return get_post_meta( $order->get_id(), '_corvuspay_order_number', true );
+			if ( $corvuspay_order_number_db ) {
+				return $corvuspay_order_number_db;
 			} else {
-				$order_number_base = get_post_meta( $order->get_id(), '_order_number', true );
 				if ( ! $order_number_base ) {
 					$order_number_base = $order->get_id();
 				}
@@ -1424,13 +1454,15 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 						'{order_number}' => $order_number_base
 					)
 				);
-				update_post_meta( $order->get_id(), '_corvuspay_order_number', $corvus_order_number );
-				update_post_meta( $order->get_id(), '_order_number', $corvus_order_number );
+				$order->update_meta_data( '_corvuspay_order_number', $corvus_order_number );
+				$order->update_meta_data( '_order_number', $corvus_order_number );
+				$order->save_meta_data();
+
 				return $corvus_order_number;
 			}
         } else {
-            if ( $order->get_payment_method() === "corvuspay" && get_post_meta( $order->get_id(), '_corvuspay_order_number', true ) ) {
-                return get_post_meta( $order->get_id(), '_corvuspay_order_number', true );
+            if ( $order->get_payment_method() === "corvuspay" && $corvuspay_order_number_db ) {
+                return $corvuspay_order_number_db;
             }
 
             return $order_number;
@@ -1526,8 +1558,9 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 	 * @param int $order_id Order id.
 	 */
 	function echo_additional_order_details( $order_id ) {
-		$approval_code    = get_post_meta( $order_id, '_corvuspay_approval_code', true );
-		$transaction_date = get_post_meta( $order_id, '_corvuspay_transaction_date', true );
+		$order            = wc_get_order( $order_id );
+		$approval_code    = $order->get_meta( '_corvuspay_approval_code' );
+		$transaction_date = $order->get_meta('_corvuspay_transaction_date');
 
 		if ( isset( $approval_code ) && isset( $transaction_date ) ) {
 			echo '<p>' . __( 'Payment successful - payment card account debited.', 'corvuspay-woocommerce-integration' ) . '</p>
@@ -1548,8 +1581,13 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 		$payment_gateways = WC()->payment_gateways()->payment_gateways();
 		$gateway          = isset( $payment_gateways[ $payment_method ] ) ? $payment_gateways[ $payment_method ] : null;
 
+		if ( OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			$isOrder = OrderUtil::is_order( $order->get_id(), wc_get_order_types() );
+		} else {
+			$isOrder = 'shop_order' === get_post_type( $order->get_id() );
+		}
 		// only display the button for corvuspay orders
-		if ( 'shop_order' !== get_post_type( $order->get_id() ) || 'auth' !== $order->get_meta( '_corvuspay_action' ) || ! $gateway || ! ( $gateway instanceof WC_Gateway_CorvusPay ) ) {
+		if ( !$isOrder || 'auth' !== $order->get_meta( '_corvuspay_action' ) || ! $gateway || ! ( $gateway instanceof WC_Gateway_CorvusPay ) ) {
 			return;
 		}
 		?>
@@ -1746,13 +1784,16 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 			$from_status = $data['status'];
 			$to_status   = $changes['status'];
 			if ( $from_status === 'on-hold' && $to_status === 'cancelled' ) {
-				if ( 'auth' === get_post_meta( $order->get_id(), '_corvuspay_action', true ) ) {
+				if ( 'auth' === $order->get_meta('_corvuspay_action') ) {
 					$payment_method   = $order->get_payment_method();
 					$payment_gateways = WC()->payment_gateways()->payment_gateways();
 					$gateway          = isset( $payment_gateways[ $payment_method ] ) ? $payment_gateways[ $payment_method ] : null;
 					if ( $gateway && ( $gateway instanceof WC_Gateway_CorvusPay ) ) {
 						$res = $gateway->void( $order->get_total(), $order );
 						if ( ! $res ) {
+							if ( $order->get_meta( '_corvuspay_token' ) === "add" ) {
+								return $order;
+							}
 							$order->set_status( $from_status );
 							$order->update_meta_data( '_corvuspay_remove_duplicate_note', 'false' );
 							add_filter( 'woocommerce_new_order_note_data', function ( $args ) use ( $order ) {
@@ -1780,7 +1821,7 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 					}
 				}
 			} elseif ( $from_status === 'on-hold' && $to_status === 'processing' ) {
-				if ( 'auth' === get_post_meta( $order->get_id(), '_corvuspay_action', true ) ) {
+				if ( 'auth' === $order->get_meta('_corvuspay_action') ) {
 					$payment_method   = $order->get_payment_method();
 					$payment_gateways = WC()->payment_gateways()->payment_gateways();
 					$gateway          = isset( $payment_gateways[ $payment_method ] ) ? $payment_gateways[ $payment_method ] : null;
