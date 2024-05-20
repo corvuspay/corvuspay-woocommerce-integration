@@ -9,3 +9,8 @@ parameters:
     - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
   scanDirectories:
     - vendor/woocommerce/subscriptions-core/includes/
+  ignoreErrors:
+    -
+      path: includes/class-wc-gateway-corvuspay.php
+      message: '#^Action callback returns bool but should not return anything\.$#'
+      count: 1

@@ -49,6 +49,34 @@ function woocommerce_corvuspay_notice_missing_wc() {
 }
 
 /**
+ * Add Settings link to plugin page.
+ *
+ * @param array $links List of existing plugin action links.
+ *
+ * @return array List of modified plugin action links.
+ */
+function corvuspay_action_links( $links ) {
+	$settings = array(
+		'<a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=checkout&section=corvuspay' ) ) . '">' . esc_html__( 'Settings', 'corvuspay-woocommerce-integration' ) . '</a>',
+	);
+
+	return array_merge( $settings, $links );
+}
+
+/**
+ * Add CorvusPay Gateway.
+ *
+ * @param array $methods Methods.
+ *
+ * @return array
+ */
+function woocommerce_add_corvuspay_gateway( $methods ) {
+	$methods[] = 'WC_Gateway_CorvusPay';
+
+	return $methods;
+}
+
+/**
  * Init CorvusPay WooCommerce gateway plugin.
  */
 function woocommerce_corvuspay_init() {
@@ -56,12 +84,12 @@ function woocommerce_corvuspay_init() {
 	define( 'WC_CORVUSPAY_FILE', __FILE__ );
 	define( 'WC_CORVUSPAY_PATH', dirname( __FILE__ ) );
 
-    $domain = 'corvuspay-woocommerce-integration';
-    $locale = apply_filters( 'plugin_locale', determine_locale(), $domain );
-    $mofile = WP_PLUGIN_DIR . '/' . dirname( plugin_basename( __FILE__ ) ) . '/languages/' . $domain . '-' . $locale . '.mo';
-    unload_textdomain( $domain );
-    load_textdomain( $domain, $mofile );
-    load_plugin_textdomain( $domain, false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+	$domain = 'corvuspay-woocommerce-integration';
+	$locale = apply_filters( 'plugin_locale', determine_locale(), $domain );
+	$mofile = WP_PLUGIN_DIR . '/' . dirname( plugin_basename( __FILE__ ) ) . '/languages/' . $domain . '-' . $locale . '.mo';
+	unload_textdomain( $domain );
+	load_textdomain( $domain, $mofile );
+	load_plugin_textdomain( $domain, false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 
 	if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
 		add_action( 'admin_notices', 'woocommerce_corvuspay_notice_missing_wc' );
@@ -71,35 +99,7 @@ function woocommerce_corvuspay_init() {
 
 	require_once WC_CORVUSPAY_PATH . '/includes/class-wc-gateway-corvuspay.php';
 
-	/**
-	 * Add Settings link to plugin page.
-	 *
-	 * @param array $links List of existing plugin action links.
-	 *
-	 * @return array List of modified plugin action links.
-	 */
-	function corvuspay_action_links( $links ) {
-		$settings = array(
-			'<a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=checkout&section=corvuspay' ) ) . '">' . esc_html__( 'Settings', 'corvuspay-woocommerce-integration' ) . '</a>',
-		);
-
-		return array_merge( $settings, $links );
-	}
-
 	add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), 'corvuspay_action_links' );
-
-	/**
-	 * Add CorvusPay Gateway.
-	 *
-	 * @param array $methods Methods.
-	 *
-	 * @return array
-	 */
-	function woocommerce_add_corvuspay_gateway( $methods ) {
-		$methods[] = 'WC_Gateway_CorvusPay';
-
-		return $methods;
-	}
 
 	add_filter( 'woocommerce_payment_gateways', 'woocommerce_add_corvuspay_gateway' );
 	WC_Gateway_CorvusPay::get_instance()->init_hooks();
@@ -114,7 +114,6 @@ function add_gateway( $gateways ) {
 	$gateways[] = 'WC_Gateway_CorvusPay';
 	return $gateways;
 }
-
 
 /**
  * Registers WooCommerce Blocks integration.

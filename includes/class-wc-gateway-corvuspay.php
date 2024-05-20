@@ -1760,7 +1760,7 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 		$payment_gateways = WC()->payment_gateways()->payment_gateways();
 		$gateway          = isset( $payment_gateways[ $payment_method ] ) ? $payment_gateways[ $payment_method ] : null;
 		if ( $gateway && ( $gateway instanceof WC_Gateway_CorvusPay ) && $old_status === $new_status ) {
-			add_filter( 'woocommerce_new_order_note_data', function ( $args ) use ( $order ) {
+			add_filter( 'woocommerce_new_order_note_data', function ( $args ) use ( $order, $old_status, $new_status ) {
 				if ( $old_status === $new_status ) {
 					return [];
 				} else {
@@ -1904,13 +1904,15 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 				$order->save_meta_data();
 
 				return 'cancelled';
+			} else {
+				return $order_status;
 			}
 		} else {
 			return $order_status;
 		}
 	}
 
-/**
+	/**
 	 * Returns the payment gateway id.
 	 *
 	 * @see WC_Payment_Gateway::$id
