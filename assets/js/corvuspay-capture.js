@@ -12,6 +12,12 @@
         );
 
     var t, r, n, c, u, m;
+
+    function visibleCaptureInputAndButton(visible) {
+        $("#capture_amount").prop("disabled", !visible);
+        $("#capture").prop("disabled", !visible);
+    }
+
     window.corvuspay_wc_payment_gateway_admin_order_add_capture_events = function () {
         return (
             (u = null != (r = window.woocommerce_admin) ? r : {}),
@@ -35,8 +41,7 @@
                 $('.inside').on('click', '#capture', function () {
                     var confirmed = confirm(corvuspay_vars.confirm_description);
                     if (confirmed) {
-                        $(this).prop("disabled", true);
-                        $("#capture_amount").prop("disabled", true);
+                        visibleCaptureInputAndButton(false);
                         // get the order_id from the button tag
                         var order_id = $(this).data('order_id');
                         var order_amount = $("#capture_amount").val();
@@ -48,6 +53,7 @@
                             dataType: 'json',
                             data: {
                                 action: 'corvuspay_complete_order',
+                                _nonce: corvuspay_vars.nonce,
                                 order_id: order_id,
                                 order_amount: order_amount
                             },
@@ -55,12 +61,15 @@
                                 if (data.error === 0) {
                                     window.location.href = window.location.href;
                                 } else {
+                                    visibleCaptureInputAndButton(true);
                                     alert(data.message);
                                     $(".cancel-action-capture").trigger("click");
                                 }
                             },
                             error: function (XMLHttpRequest, textStatus, errorThrown) {
+                                visibleCaptureInputAndButton(true);
                                 alert(errorThrown);
+                                $(".cancel-action-capture").trigger("click");
                             }
                         });
                     }

@@ -345,6 +345,10 @@ msgstr ""
 msgid "Capture Charge"
 msgstr ""
 
+#: includes/class-wc-gateway-corvuspay.php:1621
+msgid "You do not have sufficient permissions to perform this action."
+msgstr ""
+
 #. translators: %1$s: From status, %2$s: To status
 #: includes/class-wc-gateway-corvuspay.php:1693
 #: includes/class-wc-gateway-corvuspay.php:1727

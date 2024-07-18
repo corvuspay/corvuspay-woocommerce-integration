@@ -6,7 +6,7 @@ msgstr ""
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/corvuspay-"
 "woocommerce-integration\n"
 "POT-Creation-Date: 2021-04-08T14:23:18+02:00\n"
-"PO-Revision-Date: 2024-01-22 08:47+0000\n"
+"PO-Revision-Date: 2024-06-10 13:12+0000\n"
 "Last-Translator: \n"
 "Language-Team: Hrvatski\n"
 "Language: hr\n"
@@ -739,3 +739,7 @@ msgstr "Warning (upozorenja)"
 #: includes/class-wc-gateway-corvuspay.php:1727
 msgid "You are not allowed to change order from %1s to %2s."
 msgstr "Nije dozvoljeno mjenjanje narudžbi iz %1s u %2s."
+
+#: includes/class-wc-gateway-corvuspay.php:1621
+msgid "You do not have sufficient permissions to perform this action."
+msgstr "Nemate dopuštenje za izvođenje ove radnje."

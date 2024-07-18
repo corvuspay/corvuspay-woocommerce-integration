@@ -304,6 +304,7 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 			wp_enqueue_script( 'corvuspay-capture', plugins_url( 'assets/js/corvuspay-capture.js', WC_CORVUSPAY_FILE ), array( 'jquery' ), time(), true );
 			$corvuspay_vars = array(
 				'ajax_url'            => admin_url( 'admin-ajax.php' ),
+				'nonce'               => wp_create_nonce( 'corvuspay_capture_validation' ),
 				'confirm_description' => __( 'Are you sure you wish to process this capture? This action cannot be undone.', 'corvuspay-woocommerce-integration' )
 			);
 			wp_localize_script( 'corvuspay-capture', 'corvuspay_vars', $corvuspay_vars );
@@ -1614,6 +1615,14 @@ class WC_Gateway_CorvusPay extends WC_Payment_Gateway_CC {
 	 * Ajax callback for complete order.
 	 */
 	function complete_order() {
+		check_ajax_referer( 'corvuspay_capture_validation', '_nonce' );
+
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			wp_send_json( array( 'error'   => 1,
+			                     'message' => __( 'You do not have sufficient permissions to perform this action.', 'corvuspay-woocommerce-integration' )
+			) );
+		}
+
 		$order_id     = intval( $_POST['order_id'] );
 		$order_amount = floatval( $_POST['order_amount'] );
 
